@@ -1,8 +1,24 @@
 import { MockTestPaper, QuestionData, SectionId } from '../types/cat.ts';
 import { ALL_MOCK_QUESTIONS } from './mockQuestions.ts';
 import { MOCK_2_QUESTIONS } from './mock2Questions.ts';
+import { OPEN_CDC_1_QUESTIONS } from './openCdc1Questions.ts';
 
 export const BUILTIN_PAPERS: MockTestPaper[] = [
+  {
+    id: 'open-cdc-1-2024',
+    title: 'Career Launcher OPEN CDC 01 2024',
+    subtitle: 'Official CAT Exam Pattern: 24 VARC • 20 DILR • 22 QA (66 Questions)',
+    description: 'Complete Career Launcher Open CDC 01 2024 mock with full-length VARC, DILR caselets, and QA, featuring complete detailed step-by-step solutions.',
+    totalQuestions: OPEN_CDC_1_QUESTIONS.length,
+    sections: {
+      VARC: OPEN_CDC_1_QUESTIONS.filter((q) => q.section === 'VARC').length,
+      LRDI: OPEN_CDC_1_QUESTIONS.filter((q) => q.section === 'LRDI').length,
+      QA: OPEN_CDC_1_QUESTIONS.filter((q) => q.section === 'QA').length,
+    },
+    durationMinutesPerSection: 40,
+    questions: OPEN_CDC_1_QUESTIONS,
+    isCustom: false,
+  },
   {
     id: 'cat-mock-1',
     title: 'All India Open Mock CAT - 1',

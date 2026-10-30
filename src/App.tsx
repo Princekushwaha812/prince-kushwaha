@@ -31,9 +31,9 @@ export default function App() {
   const [currentPaperId, setCurrentPaperId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_ACTIVE_PAPER);
-      return saved || 'cat-mock-1';
+      return saved || 'open-cdc-1-2024';
     } catch {
-      return 'cat-mock-1';
+      return 'open-cdc-1-2024';
     }
   });
 
