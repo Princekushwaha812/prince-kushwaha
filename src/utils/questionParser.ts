@@ -72,7 +72,74 @@ Solution: Speed = 72 * (5/18) = 20 m/s. Total distance in 25s = 20 * 25 = 500m. 
 `;
 
 /**
- * Standard JSON template
+ * Robust section normalizer to recognize all common CAT aliases:
+ * - 'DILR', 'LRDI', 'DI', 'LR', 'Data Interpretation', 'Logical Reasoning', 'Sec 2', etc. -> 'LRDI'
+ * - 'QA', 'Quant', 'Quantitative Aptitude', 'Math', 'Sec 3', etc. -> 'QA'
+ * - 'VARC', 'VA', 'RC', 'Verbal', 'Reading Comprehension', 'Sec 1', etc. -> 'VARC'
+ */
+export function normalizeSection(raw: any): SectionId {
+  if (!raw) return 'VARC';
+  const s = String(raw).trim().toUpperCase();
+
+  // DILR / LRDI checks
+  if (
+    s === 'DILR' ||
+    s === 'LRDI' ||
+    s === 'DI' ||
+    s === 'LR' ||
+    s.includes('DILR') ||
+    s.includes('LRDI') ||
+    s.includes('DATA') ||
+    s.includes('LOGICAL') ||
+    s.includes('REASONING') ||
+    s === 'SEC 2' ||
+    s === 'SECTION 2' ||
+    s === 'SEC II' ||
+    s === 'SECTION II' ||
+    s === '2'
+  ) {
+    return 'LRDI';
+  }
+
+  // QA / Quant checks
+  if (
+    s === 'QA' ||
+    s === 'QUANT' ||
+    s === 'QUANTITATIVE' ||
+    s.includes('QUANT') ||
+    s.includes('MATH') ||
+    s.includes('APTITUDE') ||
+    s === 'SEC 3' ||
+    s === 'SECTION 3' ||
+    s === 'SEC III' ||
+    s === 'SECTION III' ||
+    s === '3'
+  ) {
+    return 'QA';
+  }
+
+  // VARC / Verbal checks
+  if (
+    s === 'VARC' ||
+    s === 'VA' ||
+    s === 'RC' ||
+    s.includes('VERBAL') ||
+    s.includes('READING') ||
+    s.includes('ENGLISH') ||
+    s === 'SEC 1' ||
+    s === 'SECTION 1' ||
+    s === 'SEC I' ||
+    s === 'SECTION I' ||
+    s === '1'
+  ) {
+    return 'VARC';
+  }
+
+  return 'VARC';
+}
+
+/**
+ * Standard JSON template showing all three CAT sections (VARC, DILR/LRDI, QA)
  */
 export const SAMPLE_JSON_TEMPLATE = JSON.stringify(
   [
@@ -83,7 +150,7 @@ export const SAMPLE_JSON_TEMPLATE = JSON.stringify(
       passageText:
         'Philosophy and science have long shared an intertwined history. Early natural philosophers sought to explain the physical world through deduction...',
       questionText:
-        "Which of the following best expresses the primary role of philosophy of science today according to the passage?",
+        'Which of the following best expresses the primary role of philosophy of science today according to the passage?',
       options: [
         { id: 1, text: 'Supplanting empirical science with metaphysical deduction' },
         { id: 2, text: 'Scrutinizing epistemic foundations, theory appraisal, and ethical concerns' },
@@ -98,6 +165,25 @@ export const SAMPLE_JSON_TEMPLATE = JSON.stringify(
     },
     {
       id: 2,
+      section: 'DILR',
+      type: 'MCQ',
+      contextHeader:
+        'Directions: Four project managers (Anita, Bob, Carol, David) lead four distinct projects (P1, P2, P3, P4) across four quarters.',
+      questionText: 'Who leads project P1 in quarter Q2?',
+      options: [
+        { id: 1, text: 'Bob' },
+        { id: 2, text: 'Carol' },
+        { id: 3, text: 'David' },
+        { id: 4, text: 'Anita' },
+      ],
+      correctAnswer: '3',
+      solution: {
+        explanation:
+          'By process of elimination, David must lead project P1 in quarter Q2.',
+      },
+    },
+    {
+      id: 3,
       section: 'QA',
       type: 'TITA',
       questionText:
@@ -153,12 +239,11 @@ export function parseQuestionsFromJson(rawJson: string): ParseResult {
 
   rawList.forEach((item: any, index: number) => {
     const qNum = index + 1;
-    const section: SectionId = ['VARC', 'LRDI', 'QA'].includes(String(item.section).toUpperCase())
-      ? (String(item.section).toUpperCase() as SectionId)
-      : 'VARC';
+    const rawSection = item.section || item.sec || item.sectionName || item.subject || item.group;
+    const section: SectionId = normalizeSection(rawSection);
 
-    if (!item.section) {
-      warnings.push(`Q${qNum}: No section specified, defaulted to VARC.`);
+    if (!rawSection) {
+      warnings.push(`Q${qNum}: No section specified, defaulted to ${section}.`);
     }
 
     const type: QuestionType = String(item.type).toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
@@ -272,7 +357,9 @@ export function parseQuestionsFromText(rawText: string): ParseResult {
   let passageBuffer: string[] = [];
 
   // Regex helpers
-  const sectionRegex = /^(?:Section|SECTION)\s*[:\-]\s*(VARC|LRDI|DILR|QA|QUANT|VERBAL|READING)/i;
+  const sectionHeaderRegex = /^(?:Section|SECTION|Sec|SEC)\s*[:\-]?\s*(.*)$/i;
+  const bracketSectionRegex = /^\[\s*(?:Section\s*[:\-]?)?\s*([^\]]+)\]$/i;
+  const standaloneSectionRegex = /^(?:VARC|DILR|LRDI|QA|QUANT|VERBAL|READING\s*COMPREHENSION|LOGICAL\s*REASONING)$/i;
   const passageStartRegex = /^(?:Passage|Reading Comprehension|Caselet|Directions|DIRECTIONS)\s*[:\-]?\s*(.*)$/i;
   // A question line starts with Q1, Q.1, Question 1, or a number followed by dot/paren (e.g. 1. or 1) )
   const explicitQuestionRegex = /^(?:Q(?:uestion)?\s*[\.\:\#]?\s*\d+)(?:[\.\:\)]|\s|$)/i;
@@ -283,17 +370,14 @@ export function parseQuestionsFromText(rawText: string): ParseResult {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Check section header
-    const secMatch = trimmed.match(sectionRegex);
-    if (secMatch) {
-      const secKey = secMatch[1].toUpperCase();
-      if (secKey.includes('VARC') || secKey.includes('VERBAL') || secKey.includes('READING')) {
-        currentSection = 'VARC';
-      } else if (secKey.includes('LRDI') || secKey.includes('DILR')) {
-        currentSection = 'LRDI';
-      } else if (secKey.includes('QA') || secKey.includes('QUANT')) {
-        currentSection = 'QA';
-      }
+    // Check section header like "Section: DILR", "Sec 2: DILR", "[DILR]", or standalone "DILR"
+    const headerMatch = trimmed.match(sectionHeaderRegex);
+    const bracketMatch = trimmed.match(bracketSectionRegex);
+    const isStandalone = standaloneSectionRegex.test(trimmed);
+
+    if (headerMatch || bracketMatch || isStandalone) {
+      const rawSec = headerMatch ? headerMatch[1] : bracketMatch ? bracketMatch[1] : trimmed;
+      currentSection = normalizeSection(rawSec);
       currentPassage = '';
       currentContextHeader = '';
       inPassage = false;

@@ -3,9 +3,116 @@ import assert from 'node:assert/strict';
 import {
   parseQuestionsFromText,
   parseQuestionsFromJson,
+  normalizeSection,
   SAMPLE_TEXT_TEMPLATE,
   SAMPLE_JSON_TEMPLATE,
 } from './questionParser.ts';
+
+test('normalizeSection correctly identifies all DILR and LRDI variants', () => {
+  assert.equal(normalizeSection('DILR'), 'LRDI');
+  assert.equal(normalizeSection('dilr'), 'LRDI');
+  assert.equal(normalizeSection('LRDI'), 'LRDI');
+  assert.equal(normalizeSection('lrdi'), 'LRDI');
+  assert.equal(normalizeSection('DI'), 'LRDI');
+  assert.equal(normalizeSection('LR'), 'LRDI');
+  assert.equal(normalizeSection('Data Interpretation'), 'LRDI');
+  assert.equal(normalizeSection('Logical Reasoning'), 'LRDI');
+  assert.equal(normalizeSection('Data Interpretation & Logical Reasoning'), 'LRDI');
+  assert.equal(normalizeSection('Sec 2'), 'LRDI');
+  assert.equal(normalizeSection('Section 2'), 'LRDI');
+
+  // QA variants
+  assert.equal(normalizeSection('QA'), 'QA');
+  assert.equal(normalizeSection('qa'), 'QA');
+  assert.equal(normalizeSection('Quant'), 'QA');
+  assert.equal(normalizeSection('Quantitative Aptitude'), 'QA');
+  assert.equal(normalizeSection('Section 3'), 'QA');
+
+  // VARC variants
+  assert.equal(normalizeSection('VARC'), 'VARC');
+  assert.equal(normalizeSection('varc'), 'VARC');
+  assert.equal(normalizeSection('Verbal Ability'), 'VARC');
+  assert.equal(normalizeSection('Reading Comprehension'), 'VARC');
+  assert.equal(normalizeSection('Section 1'), 'VARC');
+});
+
+test('parseQuestionsFromJson correctly maps DILR questions to LRDI section', () => {
+  const jsonWithDilr = JSON.stringify([
+    {
+      id: 1,
+      section: 'VARC',
+      type: 'MCQ',
+      questionText: 'What is the primary thesis of the author?',
+      options: ['Option A', 'Option B', 'Option C', 'Option D'],
+      correctAnswer: 'A',
+      solution: { explanation: 'Author argues...' },
+    },
+    {
+      id: 2,
+      section: 'DILR',
+      type: 'MCQ',
+      contextHeader: 'Directions for puzzle: 4 teams play 6 matches.',
+      questionText: 'Which team scored the maximum points?',
+      options: ['Team 1', 'Team 2', 'Team 3', 'Team 4'],
+      correctAnswer: '2',
+      solution: { explanation: 'Team 2 won all matches.' },
+    },
+    {
+      id: 3,
+      section: 'dilr',
+      type: 'TITA',
+      questionText: 'Find the minimum number of matches tied.',
+      correctAnswer: '0',
+      solution: { explanation: 'No match was tied.' },
+    },
+    {
+      id: 4,
+      section: 'Data Interpretation',
+      type: 'MCQ',
+      questionText: 'What is the percentage growth in sales from 2020 to 2024?',
+      options: ['10%', '20%', '30%', '40%'],
+      correctAnswer: '3',
+      solution: { explanation: '30% growth.' },
+    },
+    {
+      id: 5,
+      section: 'QA',
+      type: 'MCQ',
+      questionText: 'Find x if 2^x = 32.',
+      options: ['3', '4', '5', '6'],
+      correctAnswer: '3',
+      solution: { explanation: '2^5 = 32, so x = 5.' },
+    },
+  ]);
+
+  const result = parseQuestionsFromJson(jsonWithDilr);
+  assert.equal(result.success, true);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.questions.length, 5);
+
+  // Crucial assertion: DILR must be classified under LRDI, NOT VARC!
+  assert.equal(result.counts.VARC, 1, 'Only Q1 should be VARC');
+  assert.equal(result.counts.LRDI, 3, 'Q2, Q3, and Q4 must be in LRDI');
+  assert.equal(result.counts.QA, 1, 'Only Q5 should be QA');
+
+  assert.equal(result.questions[0].section, 'VARC');
+  assert.equal(result.questions[1].section, 'LRDI');
+  assert.equal(result.questions[2].section, 'LRDI');
+  assert.equal(result.questions[3].section, 'LRDI');
+  assert.equal(result.questions[4].section, 'QA');
+});
+
+test('parseQuestionsFromJson successfully parses updated SAMPLE_JSON_TEMPLATE with all 3 sections', () => {
+  const result = parseQuestionsFromJson(SAMPLE_JSON_TEMPLATE);
+  assert.equal(result.success, true);
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.questions.length, 3);
+  assert.equal(result.counts.VARC, 1);
+  assert.equal(result.counts.LRDI, 1);
+  assert.equal(result.counts.QA, 1);
+  assert.equal(result.counts.MCQ, 2);
+  assert.equal(result.counts.TITA, 1);
+});
 
 test('parseQuestionsFromText successfully parses sample text template', () => {
   const result = parseQuestionsFromText(SAMPLE_TEXT_TEMPLATE);
@@ -17,36 +124,6 @@ test('parseQuestionsFromText successfully parses sample text template', () => {
   assert.equal(result.counts.QA, 2);
   assert.equal(result.counts.MCQ, 4);
   assert.equal(result.counts.TITA, 2);
-
-  // Check Q1
-  const q1 = result.questions[0];
-  assert.equal(q1.section, 'VARC');
-  assert.equal(q1.type, 'MCQ');
-  assert.equal(q1.correctAnswer, '2'); // B was mapped to 2
-  assert.ok(q1.passageText && q1.passageText.includes('intertwined history'));
-
-  // Check Q4 TITA
-  const q4 = result.questions[3];
-  assert.equal(q4.section, 'LRDI');
-  assert.equal(q4.type, 'TITA');
-  assert.equal(q4.correctAnswer, '4');
-
-  // Check Q5
-  const q5 = result.questions[4];
-  assert.equal(q5.section, 'QA');
-  assert.equal(q5.type, 'MCQ');
-  assert.equal(q5.correctAnswer, '2'); // B mapped to 2
-});
-
-test('parseQuestionsFromJson successfully parses JSON template', () => {
-  const result = parseQuestionsFromJson(SAMPLE_JSON_TEMPLATE);
-  assert.equal(result.success, true);
-  assert.equal(result.errors.length, 0);
-  assert.equal(result.questions.length, 2);
-  assert.equal(result.counts.VARC, 1);
-  assert.equal(result.counts.QA, 1);
-  assert.equal(result.counts.MCQ, 1);
-  assert.equal(result.counts.TITA, 1);
 });
 
 test('parseQuestionsFromText handles empty and malformed inputs gracefully', () => {

@@ -358,8 +358,8 @@ export const CatPaperManagerModal: React.FC<CatPaperManagerModalProps> = ({
                   rows={10}
                   placeholder={
                     importFormat === 'text'
-                      ? `Section: VARC\nPassage:\n[Reading comprehension text here...]\n\nQ1. What is the central idea?\nA. First option\nB. Second option\nC. Third option\nD. Fourth option\nAns: B\nSolution: The author explicitly clarifies...\n\nSection: LRDI\nQ2. [TITA] Find the value...\nAns: 42\nSolution: ...`
-                      : `[\n  {\n    "id": 1,\n    "section": "VARC",\n    "type": "MCQ",\n    "questionText": "...",\n    "options": [{ "id": 1, "text": "..." }],\n    "correctAnswer": "1",\n    "solution": { "explanation": "..." }\n  }\n]`
+                      ? `Section: VARC\nPassage:\n[Reading comprehension text here...]\n\nQ1. What is the central idea?\nA. First option\nB. Second option\nC. Third option\nD. Fourth option\nAns: B\nSolution: The author explicitly clarifies...\n\nSection: DILR\nDirections: [Puzzle / Table details]\nQ2. Which team won?\nA. Team 1\nB. Team 2\nAns: A\nSolution: ...\n\nSection: QA\nQ3. [TITA] Find the value...\nAns: 42\nSolution: ...`
+                      : `[\n  {\n    "id": 1,\n    "section": "VARC",\n    "type": "MCQ",\n    "questionText": "...",\n    "options": ["Option 1", "Option 2", "Option 3", "Option 4"],\n    "correctAnswer": "1",\n    "solution": { "explanation": "..." }\n  },\n  {\n    "id": 2,\n    "section": "DILR",\n    "type": "MCQ",\n    "contextHeader": "Caselet or Table info...",\n    "questionText": "...",\n    "options": ["Option 1", "Option 2"],\n    "correctAnswer": "2",\n    "solution": { "explanation": "..." }\n  },\n  {\n    "id": 3,\n    "section": "QA",\n    "type": "TITA",\n    "questionText": "...",\n    "correctAnswer": "42",\n    "solution": { "explanation": "..." }\n  }\n]`
                   }
                   className="w-full font-mono text-xs p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white leading-relaxed"
                 />
