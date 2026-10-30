@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix CAT Mock Test Paper - All India Open Mock 1",
+  "description": "Authentic CAT Mock Test Paper simulator with complete 100 questions across VARC, LRDI, and QA, featuring TCS iON exam interface, interactive calculator, detailed step-by-step solutions, scorecard, and printable paper view.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
