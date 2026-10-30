@@ -31,6 +31,8 @@ interface ScorecardProps {
   onViewSolutions: () => void;
   onViewPaper: () => void;
   onRetakeExam: () => void;
+  paperTitle?: string;
+  totalQuestions?: number;
 }
 
 export const CatScorecard: React.FC<ScorecardProps> = ({
@@ -38,6 +40,8 @@ export const CatScorecard: React.FC<ScorecardProps> = ({
   onViewSolutions,
   onViewPaper,
   onRetakeExam,
+  paperTitle,
+  totalQuestions: propTotalQuestions,
 }) => {
   const {
     totalScore,
@@ -50,6 +54,12 @@ export const CatScorecard: React.FC<ScorecardProps> = ({
     totalAllocatedSeconds,
     sections,
   } = examResult;
+
+  const resolvedTotalQuestions =
+    propTotalQuestions ||
+    (sections.VARC.totalQuestions + sections.LRDI.totalQuestions + sections.QA.totalQuestions) ||
+    100;
+  const resolvedMaxMarks = resolvedTotalQuestions * 3;
 
   const formatMinSec = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -100,10 +110,10 @@ export const CatScorecard: React.FC<ScorecardProps> = ({
               <span>Official Test Evaluation Complete</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
-              All India Open Mock CAT - 1 Scorecard
+              {paperTitle ? `${paperTitle} Scorecard` : 'All India Open Mock CAT Scorecard'}
             </h2>
             <p className="text-xs sm:text-sm text-blue-200">
-              Career Launcher (aspiration.ai) • 100 Questions • Maximum Marks: 300
+              {resolvedTotalQuestions} Questions • Maximum Marks: {resolvedMaxMarks}
             </p>
           </div>
 
@@ -113,7 +123,7 @@ export const CatScorecard: React.FC<ScorecardProps> = ({
               <div className="text-xs uppercase tracking-wider text-blue-200 font-bold">Total Score</div>
               <div className="text-3xl sm:text-4xl font-black text-amber-400">
                 {totalScore}
-                <span className="text-sm font-normal text-blue-200"> / 300</span>
+                <span className="text-sm font-normal text-blue-200"> / {resolvedMaxMarks}</span>
               </div>
             </div>
             <div className="text-center pl-2">
@@ -135,10 +145,10 @@ export const CatScorecard: React.FC<ScorecardProps> = ({
             </div>
             <div className="text-2xl font-black text-gray-900">
               {totalAttempts}
-              <span className="text-xs font-semibold text-gray-400"> / 100</span>
+              <span className="text-xs font-semibold text-gray-400"> / {resolvedTotalQuestions}</span>
             </div>
             <div className="text-[11px] text-gray-500 mt-1">
-              Attempt Rate: {((totalAttempts / 100) * 100).toFixed(0)}%
+              Attempt Rate: {((totalAttempts / resolvedTotalQuestions) * 100).toFixed(0)}%
             </div>
           </div>
 

@@ -6,9 +6,10 @@ import { CatDiagram } from './CatDiagrams.tsx';
 
 interface PrintablePaperProps {
   questions: QuestionData[];
+  paperTitle?: string;
 }
 
-export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions }) => {
+export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions, paperTitle }) => {
   const [showAnswers, setShowAnswers] = useState(false);
   const [selectedSection, setSelectedSection] = useState<SectionId | 'ALL'>('ALL');
 
@@ -23,7 +24,7 @@ export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions }) 
       <div className="max-w-4xl mx-auto mb-6 p-4 bg-slate-900 text-white rounded-xl shadow-lg flex flex-wrap items-center justify-between gap-4 print:hidden">
         <div>
           <h2 className="text-base font-bold flex items-center space-x-2">
-            <span>CAT Mock Test Paper View</span>
+            <span>{paperTitle || 'CAT Mock Test Paper View'}</span>
           </h2>
           <p className="text-xs text-slate-300">
             Official test paper format • Ready to print or view with interactive solutions
@@ -83,12 +84,12 @@ export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions }) 
             Common Admission Test (CAT)
           </h1>
           <h2 className="text-sm font-sans font-semibold text-gray-700 uppercase tracking-wide">
-            All India Open Mock CAT - 1
+            {paperTitle || 'All India Open Mock CAT - 1'}
           </h2>
           <div className="flex flex-wrap justify-between pt-3 text-xs font-sans text-gray-600 border-t border-gray-200 mt-3">
             <span><strong>Total Time:</strong> 120 Minutes (40 mins / section)</span>
-            <span><strong>Total Questions:</strong> 100</span>
-            <span><strong>Maximum Marks:</strong> 300</span>
+            <span><strong>Total Questions:</strong> {questions.length}</span>
+            <span><strong>Maximum Marks:</strong> {questions.length * 3}</span>
           </div>
         </div>
 
@@ -109,6 +110,10 @@ export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions }) 
 
             if (secQuestions.length === 0) return null;
 
+            const secMin = Math.min(...secQuestions.map((q) => q.id));
+            const secMax = Math.max(...secQuestions.map((q) => q.id));
+            const rangeText = `Q.${secMin} - Q.${secMax}`;
+
             return (
               <section key={secId} className="mb-10 page-break-after">
                 {/* Section Header */}
@@ -117,7 +122,7 @@ export const CatPrintablePaper: React.FC<PrintablePaperProps> = ({ questions }) 
                     Section {secId === 'VARC' ? 'I' : secId === 'LRDI' ? 'II' : 'III'}: {secInfo.name}
                   </span>
                   <span className="text-xs font-semibold text-gray-600">
-                    {secInfo.rangeText} • {secQuestions.length} Questions
+                    {rangeText} • {secQuestions.length} Questions
                   </span>
                 </div>
 

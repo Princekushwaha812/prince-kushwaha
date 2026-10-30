@@ -76,3 +76,20 @@ export interface ExamResult {
   totalAllocatedSeconds: number;
   sections: Record<SectionId, SectionSummary>;
 }
+
+export interface MockTestPaper {
+  id: string; // e.g. 'cat-mock-1', 'cat-mock-2', 'custom-1'
+  title: string;
+  subtitle: string;
+  description?: string;
+  totalQuestions: number;
+  sections: {
+    VARC: number;
+    LRDI: number;
+    QA: number;
+  };
+  durationMinutesPerSection?: number;
+  questions: QuestionData[];
+  isCustom?: boolean;
+  createdAt?: string;
+}

@@ -12,10 +12,10 @@ import {
   ChevronRight,
   Lock,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Layers
 } from 'lucide-react';
 import { SectionId } from '../types/cat.ts';
-import { SECTION_METADATA } from '../data/mockQuestions.ts';
 
 interface CatHeaderProps {
   currentSection: SectionId;
@@ -34,6 +34,13 @@ interface CatHeaderProps {
   strictMode: boolean;
   onToggleStrictMode: () => void;
   switchWarning: string | null;
+  activePaperTitle?: string;
+  activePaperSubtitle?: string;
+  onOpenPaperManager: () => void;
+  sectionMetadata: Record<
+    SectionId,
+    { name: string; shortName: string; rangeText: string; totalQuestions: number; timeMinutes: number }
+  >;
 }
 
 export const CatHeader: React.FC<CatHeaderProps> = ({
@@ -53,6 +60,10 @@ export const CatHeader: React.FC<CatHeaderProps> = ({
   strictMode,
   onToggleStrictMode,
   switchWarning,
+  activePaperTitle = 'All India Open Mock CAT - 1',
+  activePaperSubtitle = 'Career Launcher / aspiration.ai',
+  onOpenPaperManager,
+  sectionMetadata,
 }) => {
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -73,11 +84,25 @@ export const CatHeader: React.FC<CatHeaderProps> = ({
           <div className="bg-amber-400 text-blue-950 font-black px-2 py-0.5 rounded text-sm tracking-wider shadow-xs">
             CAT
           </div>
-          <div>
-            <h1 className="text-sm font-bold tracking-wide flex items-center gap-1.5">
-              <span>All India Open Mock CAT - 1</span>
-              <span className="text-[11px] font-normal text-blue-200 hidden sm:inline">(Career Launcher / aspiration.ai)</span>
-            </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <div>
+              <h1 className="text-sm font-bold tracking-wide flex items-center gap-1.5">
+                <span>{activePaperTitle}</span>
+                {activePaperSubtitle && (
+                  <span className="text-[11px] font-normal text-blue-200 hidden sm:inline">
+                    ({activePaperSubtitle})
+                  </span>
+                )}
+              </h1>
+            </div>
+            <button
+              onClick={onOpenPaperManager}
+              className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-blue-950 rounded text-xs font-bold flex items-center space-x-1 shadow-xs transition"
+              title="Switch test paper or import your new question set"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Switch / Import Paper</span>
+            </button>
           </div>
         </div>
 
@@ -145,7 +170,7 @@ export const CatHeader: React.FC<CatHeaderProps> = ({
               >
                 <Clock className="w-4 h-4 text-emerald-400" />
                 <span>
-                  {SECTION_METADATA[currentSection].shortName}: {formatTime(sectionSecondsRemaining)}
+                  {sectionMetadata[currentSection]?.shortName || currentSection}: {formatTime(sectionSecondsRemaining)}
                 </span>
               </div>
               <button
@@ -179,7 +204,7 @@ export const CatHeader: React.FC<CatHeaderProps> = ({
             Sections (40 min each):
           </span>
           {sectionsOrder.map((secId, idx) => {
-            const sec = SECTION_METADATA[secId];
+            const sec = sectionMetadata[secId] || { shortName: secId, totalQuestions: 0 };
             const isActive = currentSection === secId;
             const isCompleted = completedSections.includes(secId);
             const isLocked = strictMode && !isActive && !isCompleted && idx > currentIndex;
@@ -281,7 +306,7 @@ export const CatHeader: React.FC<CatHeaderProps> = ({
                   : 'bg-amber-500 hover:bg-amber-400 text-blue-950 ring-1 ring-amber-300'
               }`}
             >
-              <span>{isFinalSection ? 'Submit Test' : `Finish ${SECTION_METADATA[currentSection].shortName}`}</span>
+              <span>{isFinalSection ? 'Submit Test' : `Finish ${sectionMetadata[currentSection]?.shortName || currentSection}`}</span>
               <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}

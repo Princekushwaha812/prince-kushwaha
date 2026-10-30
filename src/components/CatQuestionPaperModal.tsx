@@ -9,6 +9,7 @@ interface QuestionPaperModalProps {
   questions: QuestionData[];
   currentSection: SectionId;
   onSelectQuestion: (questionId: number) => void;
+  paperTitle?: string;
 }
 
 export const CatQuestionPaperModal: React.FC<QuestionPaperModalProps> = ({
@@ -17,6 +18,7 @@ export const CatQuestionPaperModal: React.FC<QuestionPaperModalProps> = ({
   questions,
   currentSection,
   onSelectQuestion,
+  paperTitle,
 }) => {
   const [filterSection, setFilterSection] = useState<SectionId | 'ALL'>(currentSection);
 
@@ -32,7 +34,7 @@ export const CatQuestionPaperModal: React.FC<QuestionPaperModalProps> = ({
         <div className="bg-[#244b7a] text-white px-5 py-3 flex items-center justify-between border-b border-blue-900">
           <div>
             <h2 className="text-base font-bold tracking-wide">Question Paper Overview</h2>
-            <p className="text-xs text-blue-200">All India Open Mock CAT - 1</p>
+            <p className="text-xs text-blue-200">{paperTitle || 'All India Open Mock CAT - 1'}</p>
           </div>
           <div className="flex items-center space-x-3">
             <button
@@ -66,7 +68,9 @@ export const CatQuestionPaperModal: React.FC<QuestionPaperModalProps> = ({
                     : 'bg-white text-gray-700 hover:bg-gray-200 border border-gray-300'
                 }`}
               >
-                {sec === 'ALL' ? 'All Sections (100 Qs)' : `${sec} (${SECTION_METADATA[sec].totalQuestions} Qs)`}
+                {sec === 'ALL'
+                  ? `All Sections (${questions.length} Qs)`
+                  : `${sec} (${questions.filter((q) => q.section === sec).length} Qs)`}
               </button>
             ))}
           </div>

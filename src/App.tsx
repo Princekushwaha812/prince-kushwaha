@@ -1,6 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { SectionId, UserResponse, ExamResult } from './types/cat.ts';
-import { ALL_MOCK_QUESTIONS, SECTION_METADATA } from './data/mockQuestions.ts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { SectionId, UserResponse, ExamResult, MockTestPaper } from './types/cat.ts';
+import {
+  getAllAvailablePapers,
+  getPaperById,
+  saveCustomPaper,
+  deleteCustomPaper,
+  getSectionMetadataForQuestions,
+} from './data/mockRegistry.ts';
 import { evaluateTest } from './utils/scoring.ts';
 import { CatHeader } from './components/CatHeader.tsx';
 import { CatPalette } from './components/CatPalette.tsx';
@@ -12,21 +18,56 @@ import { CatSubmitModal } from './components/CatSubmitModal.tsx';
 import { CatScorecard } from './components/CatScorecard.tsx';
 import { CatSolutionsReview } from './components/CatSolutionsReview.tsx';
 import { CatPrintablePaper } from './components/CatPrintablePaper.tsx';
+import { CatPaperManagerModal } from './components/CatPaperManagerModal.tsx';
 
 const SECTIONS_ORDER: SectionId[] = ['VARC', 'LRDI', 'QA'];
 const SECTION_DURATION_SECONDS = 40 * 60; // 2400 seconds (40 mins)
 
-const STORAGE_KEY_RESPONSES = 'cat_mock_1_responses';
-const STORAGE_KEY_SUBMITTED = 'cat_mock_1_submitted';
-const STORAGE_KEY_SECTION = 'cat_mock_1_current_section';
-const STORAGE_KEY_COMPLETED_SECTIONS = 'cat_mock_1_completed_sections';
-const STORAGE_KEY_TIME_REMAINING = 'cat_mock_1_time_remaining';
-const STORAGE_KEY_TIME_SPENT = 'cat_mock_1_time_spent';
+const STORAGE_ACTIVE_PAPER = 'cat_active_paper_id';
 
 export default function App() {
+  // Papers state
+  const [availablePapers, setAvailablePapers] = useState<MockTestPaper[]>(() => getAllAvailablePapers());
+  const [currentPaperId, setCurrentPaperId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_ACTIVE_PAPER);
+      return saved || 'cat-mock-1';
+    } catch {
+      return 'cat-mock-1';
+    }
+  });
+
+  const [isPaperManagerOpen, setIsPaperManagerOpen] = useState(false);
+
+  // Active paper object & its questions
+  const currentPaper = useMemo(() => {
+    return availablePapers.find((p) => p.id === currentPaperId) || availablePapers[0] || getPaperById(currentPaperId);
+  }, [availablePapers, currentPaperId]);
+
+  const currentQuestions = useMemo(() => currentPaper.questions, [currentPaper]);
+
+  // Dynamic section metadata for active test paper
+  const sectionMetadata = useMemo(() => {
+    return {
+      VARC: getSectionMetadataForQuestions(currentQuestions, 'VARC'),
+      LRDI: getSectionMetadataForQuestions(currentQuestions, 'LRDI'),
+      QA: getSectionMetadataForQuestions(currentQuestions, 'QA'),
+    };
+  }, [currentQuestions]);
+
+  // Keys namespaced per paper
+  const getStorageKey = (suffix: string) => {
+    if (currentPaperId === 'cat-mock-1') {
+      return `cat_mock_1_${suffix}`;
+    }
+    return `cat_paper_${currentPaperId}_${suffix}`;
+  };
+
+  // State hooks
   const [currentSection, setCurrentSection] = useState<SectionId>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_SECTION) as SectionId;
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_current_section' : `cat_paper_${currentPaperId}_current_section`;
+      const saved = localStorage.getItem(key) as SectionId;
       return SECTIONS_ORDER.includes(saved) ? saved : 'VARC';
     } catch {
       return 'VARC';
@@ -35,17 +76,22 @@ export default function App() {
 
   const [completedSections, setCompletedSections] = useState<SectionId[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_COMPLETED_SECTIONS);
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_completed_sections' : `cat_paper_${currentPaperId}_completed_sections`;
+      const saved = localStorage.getItem(key);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
-  const [currentQuestionId, setCurrentQuestionId] = useState<number>(1);
+  const [currentQuestionId, setCurrentQuestionId] = useState<number>(() => {
+    return currentQuestions[0]?.id || 1;
+  });
+
   const [isSubmitted, setIsSubmitted] = useState<boolean>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_SUBMITTED) === 'true';
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_submitted' : `cat_paper_${currentPaperId}_submitted`;
+      return localStorage.getItem(key) === 'true';
     } catch {
       return false;
     }
@@ -53,11 +99,13 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<'exam' | 'solutions' | 'scorecard' | 'paper'>(() => {
     try {
-      return localStorage.getItem(STORAGE_KEY_SUBMITTED) === 'true' ? 'scorecard' : 'exam';
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_submitted' : `cat_paper_${currentPaperId}_submitted`;
+      return localStorage.getItem(key) === 'true' ? 'scorecard' : 'exam';
     } catch {
       return 'exam';
     }
   });
+
   const [mobileExamView, setMobileExamView] = useState<'question' | 'palette'>('question');
   const [strictMode, setStrictMode] = useState<boolean>(true); // CAT Rule: strict mode on by default
   const [switchWarning, setSwitchWarning] = useState<string | null>(null);
@@ -71,7 +119,8 @@ export default function App() {
   // Section-specific timers (40 mins = 2400 seconds each)
   const [sectionTimeRemaining, setSectionTimeRemaining] = useState<Record<SectionId, number>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_TIME_REMAINING);
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_time_remaining' : `cat_paper_${currentPaperId}_time_remaining`;
+      const saved = localStorage.getItem(key);
       if (saved) return JSON.parse(saved);
     } catch {
       // Ignore
@@ -83,10 +132,11 @@ export default function App() {
     };
   });
 
-  // Track time spent per section (for Recharts visual chart in scorecard!)
+  // Track time spent per section
   const [sectionTimeSpent, setSectionTimeSpent] = useState<Record<SectionId, number>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_TIME_SPENT);
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_time_spent' : `cat_paper_${currentPaperId}_time_spent`;
+      const saved = localStorage.getItem(key);
       if (saved) return JSON.parse(saved);
     } catch {
       // Ignore
@@ -103,52 +153,137 @@ export default function App() {
   // Responses dictionary
   const [responses, setResponses] = useState<Record<number, UserResponse>>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_RESPONSES);
+      const key = currentPaperId === 'cat-mock-1' ? 'cat_mock_1_responses' : `cat_paper_${currentPaperId}_responses`;
+      const saved = localStorage.getItem(key);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
     }
   });
 
-  // Load submission status
-  useEffect(() => {
+  // Switch Paper handler
+  const handleSelectPaper = (paperId: string) => {
+    if (paperId === currentPaperId) return;
+
+    // Save current paper selection
     try {
-      const submitted = localStorage.getItem(STORAGE_KEY_SUBMITTED);
-      if (submitted === 'true') {
-        setIsSubmitted(true);
+      localStorage.setItem(STORAGE_ACTIVE_PAPER, paperId);
+    } catch {
+      // Ignore
+    }
+
+    setCurrentPaperId(paperId);
+
+    // Retrieve target paper's questions
+    const targetPaper = availablePapers.find((p) => p.id === paperId) || getPaperById(paperId);
+    const newQuestions = targetPaper.questions;
+
+    // Load target paper states
+    const responsesKey = paperId === 'cat-mock-1' ? 'cat_mock_1_responses' : `cat_paper_${paperId}_responses`;
+    const submittedKey = paperId === 'cat-mock-1' ? 'cat_mock_1_submitted' : `cat_paper_${paperId}_submitted`;
+    const sectionKey = paperId === 'cat-mock-1' ? 'cat_mock_1_current_section' : `cat_paper_${paperId}_current_section`;
+    const completedKey = paperId === 'cat-mock-1' ? 'cat_mock_1_completed_sections' : `cat_paper_${paperId}_completed_sections`;
+    const timeRemainingKey = paperId === 'cat-mock-1' ? 'cat_mock_1_time_remaining' : `cat_paper_${paperId}_time_remaining`;
+    const timeSpentKey = paperId === 'cat-mock-1' ? 'cat_mock_1_time_spent' : `cat_paper_${paperId}_time_spent`;
+
+    try {
+      const savedResponses = localStorage.getItem(responsesKey);
+      setResponses(savedResponses ? JSON.parse(savedResponses) : {});
+
+      const savedSubmitted = localStorage.getItem(submittedKey) === 'true';
+      setIsSubmitted(savedSubmitted);
+      setActiveTab(savedSubmitted ? 'scorecard' : 'exam');
+
+      const savedSection = localStorage.getItem(sectionKey) as SectionId;
+      const validSec = SECTIONS_ORDER.includes(savedSection) ? savedSection : 'VARC';
+      setCurrentSection(validSec);
+
+      const savedCompleted = localStorage.getItem(completedKey);
+      setCompletedSections(savedCompleted ? JSON.parse(savedCompleted) : []);
+
+      const savedRemaining = localStorage.getItem(timeRemainingKey);
+      setSectionTimeRemaining(
+        savedRemaining
+          ? JSON.parse(savedRemaining)
+          : {
+              VARC: SECTION_DURATION_SECONDS,
+              LRDI: SECTION_DURATION_SECONDS,
+              QA: SECTION_DURATION_SECONDS,
+            }
+      );
+
+      const savedSpent = localStorage.getItem(timeSpentKey);
+      setSectionTimeSpent(
+        savedSpent
+          ? JSON.parse(savedSpent)
+          : {
+              VARC: 0,
+              LRDI: 0,
+              QA: 0,
+            }
+      );
+
+      // Set first question of active section
+      const firstQ = newQuestions.find((q) => q.section === validSec) || newQuestions[0];
+      if (firstQ) {
+        setCurrentQuestionId(firstQ.id);
       }
     } catch {
-      // Ignore
+      // Fallback
+      setResponses({});
+      setIsSubmitted(false);
+      setActiveTab('exam');
+      setCurrentSection('VARC');
+      if (newQuestions[0]) {
+        setCurrentQuestionId(newQuestions[0].id);
+      }
     }
-  }, []);
 
-  // Save state to localStorage
+    setSwitchWarning(`Loaded test paper: "${targetPaper.title}"`);
+  };
+
+  // Import custom paper handler
+  const handleImportNewPaper = (newPaper: MockTestPaper) => {
+    saveCustomPaper(newPaper);
+    setAvailablePapers(getAllAvailablePapers());
+  };
+
+  // Delete custom paper handler
+  const handleDeleteCustomPaper = (paperId: string) => {
+    deleteCustomPaper(paperId);
+    setAvailablePapers(getAllAvailablePapers());
+    if (currentPaperId === paperId) {
+      handleSelectPaper('cat-mock-1');
+    }
+  };
+
+  // Save state to localStorage whenever it changes
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_RESPONSES, JSON.stringify(responses));
+      localStorage.setItem(getStorageKey('responses'), JSON.stringify(responses));
     } catch {
       // Ignore
     }
-  }, [responses]);
+  }, [responses, currentPaperId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_SUBMITTED, String(isSubmitted));
+      localStorage.setItem(getStorageKey('submitted'), String(isSubmitted));
     } catch {
       // Ignore
     }
-  }, [isSubmitted]);
+  }, [isSubmitted, currentPaperId]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_SECTION, currentSection);
-      localStorage.setItem(STORAGE_KEY_COMPLETED_SECTIONS, JSON.stringify(completedSections));
-      localStorage.setItem(STORAGE_KEY_TIME_REMAINING, JSON.stringify(sectionTimeRemaining));
-      localStorage.setItem(STORAGE_KEY_TIME_SPENT, JSON.stringify(sectionTimeSpent));
+      localStorage.setItem(getStorageKey('current_section'), currentSection);
+      localStorage.setItem(getStorageKey('completed_sections'), JSON.stringify(completedSections));
+      localStorage.setItem(getStorageKey('time_remaining'), JSON.stringify(sectionTimeRemaining));
+      localStorage.setItem(getStorageKey('time_spent'), JSON.stringify(sectionTimeSpent));
     } catch {
       // Ignore
     }
-  }, [currentSection, completedSections, sectionTimeRemaining, sectionTimeSpent]);
+  }, [currentSection, completedSections, sectionTimeRemaining, sectionTimeSpent, currentPaperId]);
 
   // Section Timer countdown (40 mins for current section)
   useEffect(() => {
@@ -182,7 +317,7 @@ export default function App() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isSubmitted, isTimerPaused, activeTab, currentSection]);
+  }, [isSubmitted, isTimerPaused, activeTab, currentSection, currentPaperId]);
 
   // Clear warning after 4 seconds
   useEffect(() => {
@@ -194,13 +329,14 @@ export default function App() {
 
   // Current question data
   const currentQuestion =
-    ALL_MOCK_QUESTIONS.find((q) => q.id === currentQuestionId) || ALL_MOCK_QUESTIONS[0];
+    currentQuestions.find((q) => q.id === currentQuestionId) || currentQuestions[0];
 
   // Section questions
-  const sectionQuestions = ALL_MOCK_QUESTIONS.filter((q) => q.section === currentSection);
+  const sectionQuestions = currentQuestions.filter((q) => q.section === currentSection);
 
   // Mark newly visited question as 'not_answered' if it was 'not_visited'
   useEffect(() => {
+    if (!currentQuestion) return;
     setResponses((prev) => {
       const existing = prev[currentQuestionId];
       if (!existing || existing.status === 'not_visited') {
@@ -216,7 +352,7 @@ export default function App() {
       }
       return prev;
     });
-  }, [currentQuestionId]);
+  }, [currentQuestionId, currentPaperId]);
 
   // Check if current section is last section in order
   const currentSecIndex = SECTIONS_ORDER.indexOf(currentSection);
@@ -230,11 +366,11 @@ export default function App() {
     if (strictMode) {
       if (completedSections.includes(targetSection)) {
         setSwitchWarning(
-          `Section switching is not allowed. ${SECTION_METADATA[targetSection].shortName} has already been completed and locked.`
+          `Section switching is not allowed. ${sectionMetadata[targetSection]?.shortName || targetSection} has already been completed and locked.`
         );
       } else {
         setSwitchWarning(
-          `Section switching is not allowed in CAT. You must finish ${SECTION_METADATA[currentSection].shortName} (40 min timer) before unlocking ${SECTION_METADATA[targetSection].shortName}.`
+          `Section switching is not allowed in CAT. You must finish ${sectionMetadata[currentSection]?.shortName || currentSection} (40 min timer) before unlocking ${sectionMetadata[targetSection]?.shortName || targetSection}.`
         );
       }
       return;
@@ -242,63 +378,54 @@ export default function App() {
 
     // In unlocked practice mode
     setCurrentSection(targetSection);
-    const firstOfSection = ALL_MOCK_QUESTIONS.find((q) => q.section === targetSection);
+    const firstOfSection = currentQuestions.find((q) => q.section === targetSection);
     if (firstOfSection) {
       setCurrentQuestionId(firstOfSection.id);
     }
   };
 
   const handleSelectQuestion = (questionId: number) => {
-    const targetQ = ALL_MOCK_QUESTIONS.find((q) => q.id === questionId);
+    const targetQ = currentQuestions.find((q) => q.id === questionId);
     if (!targetQ) return;
 
     // In CAT, candidate cannot jump to a question outside active section!
     if (strictMode && targetQ.section !== currentSection) {
       setSwitchWarning(
-        `In CAT, you can only attempt questions in the active section (${SECTION_METADATA[currentSection].shortName}).`
+        `In CAT, you can only attempt questions in the active section (${sectionMetadata[currentSection]?.shortName || currentSection}).`
       );
       return;
     }
 
-    if (targetQ.section !== currentSection) {
-      setCurrentSection(targetQ.section);
-    }
-    setCurrentQuestionId(targetQ.id);
+    setCurrentQuestionId(questionId);
     setMobileExamView('question');
   };
 
+  // Answer modification handlers
   const handleAnswerChange = (newAnswer: string) => {
     setResponses((prev) => ({
       ...prev,
       [currentQuestionId]: {
         ...(prev[currentQuestionId] || { timeSpentSeconds: 0, isBookmarked: false }),
         answer: newAnswer,
-        status: newAnswer.trim() !== '' ? 'answered' : 'not_answered',
+        status: newAnswer ? 'answered' : 'not_answered',
       },
     }));
   };
 
   const moveToNextQuestion = () => {
     const currentIdxInSection = sectionQuestions.findIndex((q) => q.id === currentQuestionId);
-
-    if (currentIdxInSection < sectionQuestions.length - 1) {
-      // Move to next question in same section
+    if (currentIdxInSection >= 0 && currentIdxInSection < sectionQuestions.length - 1) {
       setCurrentQuestionId(sectionQuestions[currentIdxInSection + 1].id);
     } else {
-      // Reached end of current section
-      if (isFinalSection) {
-        setIsSubmitModalOpen(true);
-      } else {
-        setSwitchWarning(
-          `You have reached the last question of ${SECTION_METADATA[currentSection].shortName}. Review questions or click "Finish ${SECTION_METADATA[currentSection].shortName}" when ready.`
-        );
-      }
+      setSwitchWarning(
+        `You have reached the last question of ${sectionMetadata[currentSection]?.shortName || currentSection}. Review questions or click "Finish ${sectionMetadata[currentSection]?.shortName || currentSection}" when ready.`
+      );
     }
   };
 
   const handleSaveAndNext = () => {
-    const currentResp = responses[currentQuestionId];
-    const hasAnswer = currentResp && currentResp.answer.trim() !== '';
+    const resp = responses[currentQuestionId];
+    const hasAnswer = resp && resp.answer && resp.answer.trim().length > 0;
 
     setResponses((prev) => ({
       ...prev,
@@ -313,8 +440,8 @@ export default function App() {
   };
 
   const handleMarkForReviewAndNext = () => {
-    const currentResp = responses[currentQuestionId];
-    const hasAnswer = currentResp && currentResp.answer.trim() !== '';
+    const resp = responses[currentQuestionId];
+    const hasAnswer = resp && resp.answer && resp.answer.trim().length > 0;
 
     setResponses((prev) => ({
       ...prev,
@@ -377,10 +504,10 @@ export default function App() {
     } else if (nextSectionId) {
       setCompletedSections((prev) => [...prev, currentSection]);
       setCurrentSection(nextSectionId);
-      const firstQ = ALL_MOCK_QUESTIONS.find((q) => q.section === nextSectionId);
+      const firstQ = currentQuestions.find((q) => q.section === nextSectionId);
       if (firstQ) setCurrentQuestionId(firstQ.id);
       setSwitchWarning(
-        `Time up for ${SECTION_METADATA[currentSection].shortName}! Automatically switched to ${SECTION_METADATA[nextSectionId].shortName} with a fresh 40-minute timer.`
+        `Time up for ${sectionMetadata[currentSection]?.shortName || currentSection}! Automatically switched to ${sectionMetadata[nextSectionId]?.shortName || nextSectionId} with a fresh 40-minute timer.`
       );
     }
   };
@@ -391,11 +518,11 @@ export default function App() {
     } else if (nextSectionId) {
       setCompletedSections((prev) => [...prev, currentSection]);
       setCurrentSection(nextSectionId);
-      const firstQ = ALL_MOCK_QUESTIONS.find((q) => q.section === nextSectionId);
+      const firstQ = currentQuestions.find((q) => q.section === nextSectionId);
       if (firstQ) setCurrentQuestionId(firstQ.id);
       setIsSubmitModalOpen(false);
       setSwitchWarning(
-        `Section ${SECTION_METADATA[currentSection].shortName} submitted and locked. Welcome to ${SECTION_METADATA[nextSectionId].shortName} (40:00).`
+        `Section ${sectionMetadata[currentSection]?.shortName || currentSection} submitted and locked. Welcome to ${sectionMetadata[nextSectionId]?.shortName || nextSectionId} (40:00).`
       );
     }
   };
@@ -407,12 +534,14 @@ export default function App() {
   };
 
   const handleRetakeExam = () => {
-    if (window.confirm('Are you sure you want to restart the exam? Your current responses and time will be cleared.')) {
+    if (window.confirm(`Are you sure you want to restart "${currentPaper.title}"? Your responses and timer for this paper will be cleared.`)) {
       setResponses({});
       setIsSubmitted(false);
       setCompletedSections([]);
       setCurrentSection('VARC');
-      setCurrentQuestionId(1);
+      if (currentQuestions[0]) {
+        setCurrentQuestionId(currentQuestions[0].id);
+      }
       setSectionTimeRemaining({
         VARC: SECTION_DURATION_SECONDS,
         LRDI: SECTION_DURATION_SECONDS,
@@ -425,12 +554,12 @@ export default function App() {
       });
       setActiveTab('exam');
       try {
-        localStorage.removeItem(STORAGE_KEY_RESPONSES);
-        localStorage.removeItem(STORAGE_KEY_SUBMITTED);
-        localStorage.removeItem(STORAGE_KEY_SECTION);
-        localStorage.removeItem(STORAGE_KEY_COMPLETED_SECTIONS);
-        localStorage.removeItem(STORAGE_KEY_TIME_REMAINING);
-        localStorage.removeItem(STORAGE_KEY_TIME_SPENT);
+        localStorage.removeItem(getStorageKey('responses'));
+        localStorage.removeItem(getStorageKey('submitted'));
+        localStorage.removeItem(getStorageKey('current_section'));
+        localStorage.removeItem(getStorageKey('completed_sections'));
+        localStorage.removeItem(getStorageKey('time_remaining'));
+        localStorage.removeItem(getStorageKey('time_spent'));
       } catch {
         // Ignore
       }
@@ -438,7 +567,9 @@ export default function App() {
   };
 
   // Evaluate test with exact time spent per section for Recharts
-  const examResult: ExamResult = evaluateTest(ALL_MOCK_QUESTIONS, responses, sectionTimeSpent);
+  const examResult: ExamResult = useMemo(() => {
+    return evaluateTest(currentQuestions, responses, sectionTimeSpent);
+  }, [currentQuestions, responses, sectionTimeSpent]);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-[#f1f5f9] overflow-hidden font-sans">
@@ -460,56 +591,73 @@ export default function App() {
         strictMode={strictMode}
         onToggleStrictMode={() => setStrictMode(!strictMode)}
         switchWarning={switchWarning}
+        activePaperTitle={currentPaper.title}
+        activePaperSubtitle={currentPaper.subtitle}
+        onOpenPaperManager={() => setIsPaperManagerOpen(true)}
+        sectionMetadata={sectionMetadata}
       />
 
-      {/* Main Body depending on Active Tab */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      {/* Main Container */}
+      <main className="flex-1 flex overflow-hidden relative">
         {activeTab === 'exam' && (
           <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-            {/* Mobile Sub-bar to toggle between Question and Palette */}
-            <div className="lg:hidden bg-slate-200 border-b border-gray-300 px-3 py-1.5 flex items-center justify-between text-xs font-semibold">
-              <span className="text-gray-700">
-                {mobileExamView === 'question' ? `Q.${currentQuestionId} (${currentQuestion.type})` : `Palette (${currentSection})`}
-              </span>
-              <div className="flex bg-white rounded-md p-0.5 border border-gray-300 shadow-xs">
-                <button
-                  onClick={() => setMobileExamView('question')}
-                  className={`px-3 py-1 rounded text-xs transition ${
-                    mobileExamView === 'question'
-                      ? 'bg-[#1b3a5c] text-white font-bold'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Question
-                </button>
-                <button
-                  onClick={() => setMobileExamView('palette')}
-                  className={`px-3 py-1 rounded text-xs transition ${
-                    mobileExamView === 'palette'
-                      ? 'bg-[#1b3a5c] text-white font-bold'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Palette ({sectionQuestions.length})
-                </button>
-              </div>
+            {/* Mobile View Toggle Buttons */}
+            <div className="lg:hidden flex border-b border-gray-300 bg-white text-xs font-semibold">
+              <button
+                onClick={() => setMobileExamView('question')}
+                className={`flex-1 py-2 text-center transition ${
+                  mobileExamView === 'question'
+                    ? 'border-b-2 border-blue-600 text-blue-700 bg-blue-50/50'
+                    : 'text-gray-600'
+                }`}
+              >
+                Question View
+              </button>
+              <button
+                onClick={() => setMobileExamView('palette')}
+                className={`flex-1 py-2 text-center transition ${
+                  mobileExamView === 'palette'
+                    ? 'border-b-2 border-blue-600 text-blue-700 bg-blue-50/50'
+                    : 'text-gray-600'
+                }`}
+              >
+                Question Palette ({sectionQuestions.length})
+              </button>
             </div>
 
-            {/* Question Screen */}
-            <div className={`flex-1 flex-col overflow-hidden ${mobileExamView === 'question' ? 'flex' : 'hidden lg:flex'}`}>
-              <CatQuestionArea
-                question={currentQuestion}
-                response={responses[currentQuestion.id]}
-                onAnswerChange={handleAnswerChange}
-                onSaveAndNext={handleSaveAndNext}
-                onMarkForReviewAndNext={handleMarkForReviewAndNext}
-                onClearResponse={handleClearResponse}
-                onPreviousQuestion={handlePreviousQuestion}
-                onNextQuestion={handleNextQuestion}
-                onToggleBookmark={() => handleToggleBookmark(currentQuestion.id)}
-                isFirstQuestion={sectionQuestions[0]?.id === currentQuestionId}
-                isLastQuestion={sectionQuestions[sectionQuestions.length - 1]?.id === currentQuestionId}
-              />
+            {/* Left Question Area */}
+            <div
+              className={`flex-1 flex flex-col bg-white overflow-hidden ${
+                mobileExamView === 'palette' ? 'hidden lg:flex' : 'flex'
+              }`}
+            >
+              {currentQuestion ? (
+                <CatQuestionArea
+                  question={currentQuestion}
+                  response={responses[currentQuestion.id]}
+                  onAnswerChange={handleAnswerChange}
+                  onSaveAndNext={handleSaveAndNext}
+                  onMarkForReviewAndNext={handleMarkForReviewAndNext}
+                  onClearResponse={handleClearResponse}
+                  onPreviousQuestion={handlePreviousQuestion}
+                  onNextQuestion={handleNextQuestion}
+                  onToggleBookmark={() => handleToggleBookmark(currentQuestion.id)}
+                  isFirstQuestion={sectionQuestions[0]?.id === currentQuestionId}
+                  isLastQuestion={sectionQuestions[sectionQuestions.length - 1]?.id === currentQuestionId}
+                />
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-8 text-center text-gray-500">
+                  <div>
+                    <p className="text-base font-semibold">No questions found in this section.</p>
+                    <button
+                      onClick={() => setIsPaperManagerOpen(true)}
+                      className="mt-3 px-4 py-2 bg-blue-600 text-white rounded text-xs font-bold"
+                    >
+                      Open Question Paper Manager
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right Side Question Palette */}
@@ -532,18 +680,22 @@ export default function App() {
             onViewSolutions={() => setActiveTab('solutions')}
             onViewPaper={() => setActiveTab('paper')}
             onRetakeExam={handleRetakeExam}
+            paperTitle={currentPaper.title}
+            totalQuestions={currentQuestions.length}
           />
         )}
 
         {activeTab === 'solutions' && (
           <CatSolutionsReview
-            questions={ALL_MOCK_QUESTIONS}
+            questions={currentQuestions}
             responses={responses}
             onToggleBookmark={handleToggleBookmark}
           />
         )}
 
-        {activeTab === 'paper' && <CatPrintablePaper questions={ALL_MOCK_QUESTIONS} />}
+        {activeTab === 'paper' && (
+          <CatPrintablePaper questions={currentQuestions} paperTitle={currentPaper.title} />
+        )}
       </main>
 
       {/* Calculator Modal */}
@@ -553,8 +705,9 @@ export default function App() {
       <CatQuestionPaperModal
         isOpen={isQuestionPaperOpen}
         onClose={() => setIsQuestionPaperOpen(false)}
-        questions={ALL_MOCK_QUESTIONS}
+        questions={currentQuestions}
         currentSection={currentSection}
+        paperTitle={currentPaper.title}
         onSelectQuestion={(qId) => {
           handleSelectQuestion(qId);
           setActiveTab('exam');
@@ -572,11 +725,22 @@ export default function App() {
         isOpen={isSubmitModalOpen}
         onClose={() => setIsSubmitModalOpen(false)}
         onConfirmSubmit={handleConfirmSectionOrExamSubmit}
-        questions={ALL_MOCK_QUESTIONS}
+        questions={currentQuestions}
         responses={responses}
         currentSection={currentSection}
         isFinalSubmit={isFinalSection}
         nextSection={nextSectionId}
+      />
+
+      {/* Paper Switcher & Question Set Importer Modal */}
+      <CatPaperManagerModal
+        isOpen={isPaperManagerOpen}
+        onClose={() => setIsPaperManagerOpen(false)}
+        availablePapers={availablePapers}
+        activePaperId={currentPaperId}
+        onSelectPaper={handleSelectPaper}
+        onImportNewPaper={handleImportNewPaper}
+        onDeleteCustomPaper={handleDeleteCustomPaper}
       />
     </div>
   );
